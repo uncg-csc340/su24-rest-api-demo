@@ -51,6 +51,17 @@ public class RestApiController {
         return studentDatabase.values();
     }
 
+    /**
+     * Get one student by Id
+     *
+     * @param id the unique student id.
+     * @return the student.
+     */
+    @GetMapping("students/{id}")
+    public Student getStudentById(@PathVariable int id) {
+        return studentDatabase.get(id);
+    }
+
 
     /**
      * Create a new Student entry.
