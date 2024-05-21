@@ -1,11 +1,12 @@
 package com.csc340.restapidemo;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
-
+import com.fasterxml.jackson.core.type.TypeReference;
+import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -14,35 +15,44 @@ import java.util.logging.Logger;
 @RestController
 public class RestApiController {
 
-    Map<Integer, Student> studentDatabase = new HashMap<>();
+    private static final String FILE_PATH = "students.json";
+    private ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * Hello World API endpoint.
-     *
-     * @return response string.
-     */
+    private Map<Integer, Student> studentDatabase = new HashMap<>();
+
+    public RestApiController() {
+        loadStudentsFromFile();
+    }
+
+    private void loadStudentsFromFile() {
+        try {
+            File file = new File(FILE_PATH);
+            if (file.exists()) {
+                studentDatabase = objectMapper.readValue(file, new TypeReference<Map<Integer, Student>>() {});
+            }
+        } catch (IOException e) {
+            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE, "Failed to load students from file", e);
+        }
+    }
+
+    private void saveStudentsToFile() {
+        try {
+            objectMapper.writeValue(new File(FILE_PATH), studentDatabase);
+        } catch (IOException e) {
+            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE, "Failed to save students to file", e);
+        }
+    }
+
     @GetMapping("/hello")
     public String hello() {
         return "Hello, World!";
     }
 
-    /**
-     * Greeting API endpoint.
-     *
-     * @param name the request parameter
-     * @return the response string.
-     */
     @GetMapping("/greeting")
     public String greeting(@RequestParam(value = "name", defaultValue = "Dora") String name) {
         return "Hola, soy " + name;
     }
 
-
-    /**
-     * List all students.
-     *
-     * @return the list of students.
-     */
     @GetMapping("students/all")
     public Object getAllStudents() {
         if (studentDatabase.isEmpty()) {
@@ -51,47 +61,48 @@ public class RestApiController {
         return studentDatabase.values();
     }
 
-    /**
-     * Get one student by Id
-     *
-     * @param id the unique student id.
-     * @return the student.
-     */
     @GetMapping("students/{id}")
     public Student getStudentById(@PathVariable int id) {
         return studentDatabase.get(id);
     }
 
-
-    /**
-     * Create a new Student entry.
-     *
-     * @param student the new Student
-     * @return the List of Students.
-     */
     @PostMapping("students/create")
     public Object createStudent(@RequestBody Student student) {
         studentDatabase.put(student.getId(), student);
+        saveStudentsToFile();
         return studentDatabase.values();
     }
 
-    /**
-     * Delete a Student by id
-     *
-     * @param id the id of student to be deleted.
-     * @return the List of Students.
-     */
+    @PutMapping("students/update/{id}")
+    public Object updateStudent(@PathVariable int id, @RequestBody Student updatedStudent) {
+        // Ensure the ID in the path variable matches the ID in the request body
+        if (!studentDatabase.containsKey(id)) {
+            return "Student with ID " + id + " does not exist.";
+        }
+
+        // Update the student's ID from the request body if necessary
+        updatedStudent.setId(id);
+
+        // Update the student in the database
+        studentDatabase.put(id, updatedStudent);
+        saveStudentsToFile();
+
+        return "Student updated successfully.";
+    }
+
     @DeleteMapping("students/delete/{id}")
     public Object deleteStudent(@PathVariable int id) {
+        if (!studentDatabase.containsKey(id)) {
+            return "Student with ID " + id + " does not exist.";
+        }
+
         studentDatabase.remove(id);
+        saveStudentsToFile();
         return studentDatabase.values();
     }
 
-    /**
-     * Get a quote from quotable and make it available our own API endpoint
-     *
-     * @return The quote json response
-     */
+
+
     @GetMapping("/quote")
     public Object getQuote() {
         try {
@@ -99,11 +110,9 @@ public class RestApiController {
             RestTemplate restTemplate = new RestTemplate();
             ObjectMapper mapper = new ObjectMapper();
 
-            //We are expecting a String object as a response from the above API.
             String jSonQuote = restTemplate.getForObject(url, String.class);
             JsonNode root = mapper.readTree(jSonQuote);
 
-            //Parse out the most important info from the response and use it for whatever you want. In this case, just print.
             String quoteAuthor = root.get("author").asText();
             String quoteContent = root.get("content").asText();
             System.out.println("Author: " + quoteAuthor);
@@ -112,18 +121,11 @@ public class RestApiController {
             return root;
 
         } catch (JsonProcessingException ex) {
-            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE,
-                    null, ex);
+            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE, null, ex);
             return "error in /quote";
         }
     }
 
-    /**
-     * Get a list of universities from hipolabs and make them available at our own API
-     * endpoint.
-     *
-     * @return json array
-     */
     @GetMapping("/univ")
     public Object getUniversities() {
         try {
@@ -134,9 +136,7 @@ public class RestApiController {
             String jsonListResponse = restTemplate.getForObject(url, String.class);
             JsonNode root = mapper.readTree(jsonListResponse);
 
-            //The response from the above API is a JSON Array, which we loop through.
             for (JsonNode rt : root) {
-                //Extract relevant info from the response and use it for what you want, in this case just print to the console.
                 String name = rt.get("name").asText();
                 String country = rt.get("country").asText();
                 System.out.println(name + ": " + country);
@@ -144,10 +144,48 @@ public class RestApiController {
 
             return root;
         } catch (JsonProcessingException ex) {
-            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE,
-                    null, ex);
+            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE, null, ex);
             return "error in /univ";
         }
+    }
 
+    @GetMapping("/weather")
+    public Object getWeather(@RequestParam(value = "city", defaultValue = "London") String city) {
+        try {
+            String apiKey = "2665d6bf2317594fcb3763d99ce8d46a"; // Replace with your OpenWeatherMap API key
+            // DO NOT SEARCH THIS KEY ON THE BROWSER SEARCH THE KEY IN THE COMMENTS
+            // RIGHT BELOW THIS
+            String url = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "&appid=" + apiKey;
+            // HERE IS WHAT THE KEY SHOULD LOOK LIKE.
+            // THIS KEY! --> COPY AND PASTE THE FOLLOWING:
+            // http://api.openweathermap.org/data/2.5/weather?q=London&appid=2665d6bf2317594fcb3763d99ce8d46a
+            RestTemplate restTemplate = new RestTemplate();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String jsonWeather = restTemplate.getForObject(url, String.class);
+            JsonNode root = mapper.readTree(jsonWeather);
+
+            // Parse the response to extract relevant information
+            String weatherDescription = root.get("weather").get(0).get("description").asText();
+            double temperature = root.get("main").get("temp").asDouble();
+            int humidity = root.get("main").get("humidity").asInt();
+
+            // Print the extracted information to the system output
+            System.out.println("Weather in " + city + ": " + weatherDescription);
+            System.out.println("Temperature: " + temperature + "K");
+            System.out.println("Humidity: " + humidity + "%");
+
+            // Return the parsed response
+            Map<String, Object> weatherInfo = new HashMap<>();
+            weatherInfo.put("description", weatherDescription);
+            weatherInfo.put("temperature", temperature);
+            weatherInfo.put("humidity", humidity);
+
+            return weatherInfo;
+
+        } catch (JsonProcessingException ex) {
+            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE, null, ex);
+            return "error in /weather";
+        }
     }
 }
