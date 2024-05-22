@@ -3,18 +3,21 @@ package com.csc340.restapidemo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @RestController
+@RequestMapping("/students")
 public class RestApiController {
 
-    Map<Integer, Student> studentDatabase = new HashMap<>();
+    private final StudentService studentService;
 
     /**
      * Hello World API endpoint.
@@ -43,55 +46,36 @@ public class RestApiController {
      *
      * @return the list of students.
      */
-    @GetMapping("students/all")
-    public Object getAllStudents() {
-        if (studentDatabase.isEmpty()) {
-            studentDatabase.put(1, new Student(1, "sample1", "csc", 3.86));
-        }
-        return studentDatabase.values();
+
+    @Autowired
+    public RestApiController(StudentService studentService) {
+        this.studentService = studentService;
     }
 
-    /**
-     * Get one student by Id
-     *
-     * @param id the unique student id.
-     * @return the student.
-     */
-    @GetMapping("students/{id}")
+    @GetMapping("/all")
+    public List<Student> getAllStudents() {
+        return studentService.getAllStudents();
+    }
+
+    @GetMapping("/{id}")
     public Student getStudentById(@PathVariable int id) {
-        return studentDatabase.get(id);
+        return studentService.getStudentById(id);
     }
 
-
-    /**
-     * Create a new Student entry.
-     *
-     * @param student the new Student
-     * @return the List of Students.
-     */
-    @PostMapping("students/create")
-    public Object createStudent(@RequestBody Student student) {
-        studentDatabase.put(student.getId(), student);
-        return studentDatabase.values();
+    @DeleteMapping("/{id}")
+    public void deleteStudentById(@PathVariable int id) {
+        studentService.deleteStudentById(id);
     }
 
-    /**
-     * Delete a Student by id
-     *
-     * @param id the id of student to be deleted.
-     * @return the List of Students.
-     */
-    @DeleteMapping("students/delete/{id}")
-    public Object deleteStudent(@PathVariable int id) {
-        studentDatabase.remove(id);
-        return studentDatabase.values();
+    @PostMapping("/create")
+    public void addStudent(@RequestBody Student student) {
+        studentService.createStudent(student);
     }
 
-    /**
-     * Get a quote from quotable and make it available our own API endpoint
-     *
-     * @return The quote json response
-     */
+    @PutMapping("/update/{id}")
+    public void updateStudent(@PathVariable int id, @RequestBody Student updatedStudent) {
+        studentService.updateStudent(id, updatedStudent);
+    }
     @GetMapping("/quote")
     public Object getQuote() {
         try {
@@ -149,5 +133,26 @@ public class RestApiController {
             return "error in /univ";
         }
 
+    }
+
+    @GetMapping("/catfact")
+    public Object getCatFact() {
+        try {
+            String url = "https://catfact.ninja/fact";
+            RestTemplate restTemplate = new RestTemplate();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String jsonResponse = restTemplate.getForObject(url, String.class);
+            JsonNode root = mapper.readTree(jsonResponse);
+
+            String catFact = root.get("fact").asText();
+            catFact = "Cat Fact: " + catFact;
+
+            return catFact;
+
+        } catch (JsonProcessingException ex) {
+            Logger.getLogger(RestApiController.class.getName()).log(Level.SEVERE, null, ex);
+            return "error in /catfact";
+        }
     }
 }
